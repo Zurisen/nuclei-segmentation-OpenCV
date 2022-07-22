@@ -4,75 +4,57 @@ import numpy as np
 import glob
 import PIL.Image as Image
 import pandas as pd
-# pip install torchsummary
-import torch
-import torch.nn as nn
+import numpy as np
 from tqdm.notebook import tqdm
-from torchvision import models
-import torch.nn.functional as F
-import torchvision.datasets as datasets
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-from torchvision import models
-#from torchsummary import summary
-import torch.optim as optim
-import torchvision.transforms.functional as TF
 from skimage import data, io, img_as_float, exposure
 import matplotlib.pyplot as plt
 
 #Dataset Loader
-class LoadDataSet(torch.utils.data.Dataset):
-        def __init__(self, path, train=True, IMG_HEIGHT=256, IMG_WIDTH=256, rotation=0):
-            self.path = path
-            self.IMG_HEIGHT = IMG_HEIGHT
-            self.IMG_WIDTH = IMG_WIDTH
-            self.folders = os.listdir(path)
-            self.rotation = rotation
-            train_indx = int(0.95*len(self.folders))
-            if train:
-                self.folders = self.folders[:train_indx]
-            else:
-                self.folders = self.folders[train_indx:]
-            
-            self.transforms = transforms.Compose(
-                [transforms.Resize((self.IMG_HEIGHT, self.IMG_WIDTH)), 
-                                    transforms.ToTensor()])
-        
-        def __len__(self):
-            return len(self.folders)
-              
-        
-        def __getitem__(self,idx):
-            image_folder = os.path.join(self.path,
-                                        self.folders[idx],'images/')
-            mask_folder = os.path.join(self.path,
-                                       self.folders[idx],'masks/')
-            image_path = os.path.join(image_folder,
-                                      os.listdir(image_folder)[0])
-            
-            img = Image.open(image_path)
-            img = self.transforms(img)
-            img = TF.rotate(img, self.rotation)
-            
-            mask = self.get_mask(mask_folder)
-            mask = torch.from_numpy(mask).reshape(1,self.IMG_HEIGHT,self.IMG_WIDTH)
-            return img, mask
+def plot_equalizations(img, clip_limit=0.03):
+    '''
+    Performs histogram normal equalization for the given input image
+    Args:
+        img (Numpy Array): 3 channel input image
+    Doc: https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_equalize.html
+    '''
+    
+    img[img>255]=255
+    
+    # Adaptive Equalization
+    img_adapteq = exposure.equalize_adapthist(img, clip_limit=clip_limit)
 
+    # Display results
+    fig = plt.figure(figsize=(18, 18))
+    axes = np.zeros((2, 2), dtype=np.object)
+    axes[0, 0] = fig.add_subplot(2, 2, 1)
+    for i in range(1, 2):
+        axes[0, i] = fig.add_subplot(2, 2, 1+i, sharex=axes[0,0], sharey=axes[0,0])
+    for i in range(0, 2):
+        axes[1, i] = fig.add_subplot(2, 2, 3+i)
 
-        def get_mask(self,mask_folder):
-            mask = np.zeros((self.IMG_HEIGHT, self.IMG_WIDTH, 1),
-                            dtype=np.bool)
-            for mask_ in os.listdir(mask_folder):
-                    mask_ = Image.open(os.path.join(mask_folder,mask_))
-                    mask_ = self.transforms(mask_)
-                    mask_ = TF.rotate(mask_, self.rotation).numpy()
-                    mask_ = np.expand_dims(mask_,axis=-1)
-                    mask = np.maximum(mask, mask_)
-              
-            return mask
+    ax_img, ax_hist, ax_cdf = plot_img_and_hist(img, axes[:, 0])
+    ax_img.set_title('Low contrast image')
+
+    y_min, y_max = ax_hist.get_ylim()
+    ax_hist.set_ylabel('Number of pixels')
+    ax_hist.set_yticks(np.linspace(0, y_max, 5))
+
+    ax_img, ax_hist, ax_cdf = plot_img_and_hist(img_adapteq, axes[:, 1])
+    ax_img.set_title('Adaptive equalization')
+
+    ax_cdf.set_ylabel('Fraction of total intensity')
+    ax_cdf.set_yticks(np.linspace(0, 1, 5))
+
+    # prevent overlap of y-axis labels
+    fig.tight_layout()
+    plt.show()
+    
+    return img.astype(np.uint8), img_adapteq.astype(np.uint8)
+
 
 def plot_img_and_hist(image, axes, bins=256):
-    """Plot an image along with its histogram and cumulative histogram.
+    """
+    Plot an image along with its histogram and cumulative histogram.
 
     """
     image = img_as_float(image)
@@ -96,3 +78,51 @@ def plot_img_and_hist(image, axes, bins=256):
     ax_cdf.set_yticks([])
 
     return ax_img, ax_hist, ax_cdf
+
+def extract_masks(image, sensitivity, dilation=True, plot=False):
+    '''
+    Get mask with the nuclei segmentations of the image.
+    Args:
+        image (Numpy Array): 3 channel input image.
+        sensitivity (3 elements List): Sets the threshold for masking
+        each RGB channel.
+        dilation (Bool): Whether or not apply dilation on the segmentations,
+        it slightly increases the area of each segmentation.
+        plot (Bool): Plots the mask using matplotlib.
+    '''
+    
+    ## options
+    dilation=True
+    ##
+
+    size = image.shape[1]
+    #imgray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv2.threshold(image, sensitivity, 255, 0)
+    ## Optional dilation
+    if dilation:
+        kernal = np.ones((2, 2), np.uint8)
+        dilation = cv2.dilate(thresh, kernal, iterations=1)
+        final_mask = dilation
+    else:
+        final_mask = thresh
+    ## Find contours
+
+    contours, hierarchy = cv2.findContours(
+        final_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    objects = str(len(contours))
+    mask = np.zeros(final_mask.shape, dtype=np.int16)
+    all_contours = cv2.drawContours(deepcopy(mask) , contours, -1, 255,-1)
+
+    if plot:
+        plt.subplot(1,2,1)
+        plt.imshow(image, cmap='gray')
+        plt.title(f'Input image')
+        plt.axis('off')
+
+        plt.subplot(1,2,2)
+        plt.imshow(all_contours, cmap="gray",alpha=1)
+        plt.title(f"Segmented mask")
+        plt.axis('off')
+        plt.show()
+    return mask, contours, hierarchy
