@@ -8,6 +8,7 @@ import numpy as np
 from tqdm.notebook import tqdm
 from skimage import data, io, img_as_float, exposure
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 #Dataset Loader
 def plot_equalizations(img, clip_limit=0.03):
