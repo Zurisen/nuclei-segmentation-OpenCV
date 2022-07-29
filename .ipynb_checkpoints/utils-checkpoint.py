@@ -2,16 +2,18 @@ import os
 import cv2
 import numpy as np
 import glob
-import PIL.Image as Image
+from PIL import Image, ImageEnhance
 import pandas as pd
 import numpy as np
 from tqdm.notebook import tqdm
 from skimage import data, io, img_as_float, exposure
 import matplotlib.pyplot as plt
 from copy import deepcopy
+import tifffile
+
 
 #Dataset Loader
-def plot_equalizations(img, clip_limit=0.03):
+def plot_equalizations(img, clip_limit=0.03, contrast=0.7, brightness=0.7):
     '''
     Performs histogram normal equalization for the given input image
     Args:
@@ -20,6 +22,13 @@ def plot_equalizations(img, clip_limit=0.03):
     '''
     
     img[img>255]=255
+    img = img.astype(np.uint8)
+    img = Image.fromarray(img)
+    bright = ImageEnhance.Brightness(img)
+    img = bright.enhance(brightness)
+    cont = ImageEnhance.Contrast(img)
+    img = cont.enhance(contrast)
+    img = np.array(img)
     
     # Adaptive Equalization
     img_adapteq = exposure.equalize_adapthist(img, clip_limit=clip_limit)
@@ -53,11 +62,46 @@ def plot_equalizations(img, clip_limit=0.03):
     return img.astype(np.uint8), img_adapteq.astype(np.uint8)
 
 
+#Dataset Loader
+def process_channels(img, file_name, clip_limit=0.03, contrast=9, brightness=0.2):
+    '''
+    Performs histogram normal equalization for the given input image
+    Args:
+        img (Numpy Array): 3 channel input image
+    Doc: https://scikit-image.org/docs/stable/auto_examples/color_exposure/plot_equalize.html
+    '''
+    img_channels = []
+    
+    img[img>255]=255
+    
+    for i in range(img.shape[2]):
+        chan = img[:,:,i]
+        chan = chan.astype(np.uint8)
+        chan = Image.fromarray(chan)
+        bright = ImageEnhance.Brightness(chan)
+        chan = bright.enhance(brightness)
+        cont = ImageEnhance.Contrast(chan)
+        chan = cont.enhance(contrast)
+        chan = np.array(chan)
+        chan = chan.astype(np.uint8)
+
+        if not os.path.exists(os.path.join("results", file_name)):
+            os.mkdir(os.path.join("results", file_name))
+
+        img_channels.append(chan)
+        tifffile.imwrite(f'results/{file_name}/Channel_{i+1}.tiff', chan)
+    
+    
+    
+    return img_channels
+
+
 def plot_img_and_hist(image, axes, bins=256):
     """
     Plot an image along with its histogram and cumulative histogram.
 
     """
+
     image = img_as_float(image)
     ax_img, ax_hist = axes
     ax_cdf = ax_hist.twinx()

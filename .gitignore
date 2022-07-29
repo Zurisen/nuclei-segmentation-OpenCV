@@ -3,3 +3,7 @@
 *.jpg
 *.jpeg
 *.html
+*.tiff
+*.nd2
+*.pdf
+*.svg
