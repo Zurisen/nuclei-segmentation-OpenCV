@@ -85,8 +85,11 @@ def process_channels(img, file_name, clip_limit=0.03, contrast=9, brightness=0.2
         chan = np.array(chan)
         chan = chan.astype(np.uint8)
 
-        if not os.path.exists(os.path.join("results", file_name)):
-            os.mkdir(os.path.join("results", file_name))
+        if not os.path.exists(os.path.join("results", file_name.split("/")[0])):
+            os.mkdir(os.path.join("results", file_name.split("/")[0]))
+            
+        if not os.path.exists(os.path.join("results", file_name.split("/")[0], file_name.split("/")[1])):
+            os.mkdir(os.path.join("results", file_name.split("/")[0], file_name.split("/")[1]))
 
         img_channels.append(chan)
         tifffile.imwrite(f'results/{file_name}/Channel_{i+1}.tiff', chan)
