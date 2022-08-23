@@ -7,3 +7,5 @@
 *.nd2
 *.pdf
 *.svg
+statistics/
+*.zip
