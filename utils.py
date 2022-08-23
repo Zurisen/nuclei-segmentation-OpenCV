@@ -10,7 +10,70 @@ from skimage import data, io, img_as_float, exposure
 import matplotlib.pyplot as plt
 from copy import deepcopy
 import tifffile
+import plotly.graph_objects as go
+import plotly.express as px
+import plotly.io as pio
+pio.renderers.default='svg'
 
+## Compute boxplot and histogram count statistics
+def create_boxplot(df_RGB, x, y, color, protein, tag=""):
+    
+    if protein != None:
+        df_RGB = df_RGB[df_RGB["Protein"] == protein]
+    fig = px.box(df_RGB, x=x, y=y, color=color)
+    fig.update_traces(quartilemethod="exclusive") # or "inclusive", or "linear" by default
+    fig.update_layout(font=dict(size=20))
+    fig.show()
+    
+    if not os.path.exists(f"statistics/{tag}"):
+        os.mkdir(f"statistics/{tag}")
+    fig.write_html(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.html")
+    fig.write_image(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.pdf")
+    fig.write_image(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.png")
+    
+    return fig
+
+def create_count(df_RGB, x, color, protein, tag=""):
+    
+    if protein != None:
+        df_RGB = df_RGB[df_RGB["Protein"] == protein]
+    df_RGB = df_RGB.groupby(by=["File","Type","Channel","Protein"],as_index=False).count().sort_values("Type", ascending=False)
+    fig = px.histogram(df_RGB, x=x, y="Unnamed: 0",color=color, barmode="group", histfunc="avg")
+    fig.update_layout(font=dict(size=20))
+    fig.update_layout(
+        xaxis_title_text='Channel', # xaxis label
+        yaxis_title_text='Avg Detections per Image', # yaxis label
+        bargap=0.2, # gap between bars of adjacent location coordinates
+        bargroupgap=0.2, # gap between bars of the same location coordinates,
+    )
+    fig.update_xaxes(categoryorder='category ascending')
+    # Reduce opacity to see both histograms
+    fig.update_traces(opacity=0.75)
+    fig.show()
+    
+    if not os.path.exists(f"statistics/{tag}"):
+        os.mkdir(f"statistics/{tag}")
+    fig.write_html(f"statistics/{tag}/hist_{x}_{color}_{protein}.html")
+    fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}.pdf")
+    fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}.png")
+    
+    return fig
+
+def compute_statistics(images_names, protein, tag=""):
+    
+    df_RGB = pd.DataFrame(columns = ["File", "Channel", "#", "Intensity", "AreaPx", "Areamic", "Protein", "Type"])
+
+    for image_name in images_names:
+        try:
+            df_RGB = pd.concat([df_RGB, pd.read_csv(image_name)], ignore_index=True)
+        except:
+            pass
+    df_RGB["Channel"] = df_RGB["Channel"].astype("string")
+    df_RGB.loc[:,"Protein"] = df_RGB.loc[:,"Protein"].apply(lambda x: x[1:])
+    create_boxplot(df_RGB, y="Intensity", x="Channel", color="Type",
+                   protein=protein, tag=tag)
+    create_count(df_RGB, x="Channel", color="Type", protein=protein, tag=tag)
+    
 
 #Dataset Loader
 def plot_equalizations(img, clip_limit=0.03, contrast=0.7, brightness=0.7):
