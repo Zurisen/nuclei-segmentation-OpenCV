@@ -20,9 +20,65 @@ def create_boxplot(df_RGB, x, y, color, protein, tag=""):
     
     if protein != None:
         df_RGB = df_RGB[df_RGB["Protein"] == protein]
-    fig = px.box(df_RGB, x=x, y=y, color=color)
-    fig.update_traces(quartilemethod="exclusive") # or "inclusive", or "linear" by default
+    df_RGB = df_RGB.sort_values('Type')
+    df_RGB = df_RGB.groupby(by=['Type', 'Channel','File'], as_index=False).count()
+    #print(df_RGB)
+    fig = px.box(df_RGB, x=x, y=y, color=color, points='all')
+    
+    fig.update_traces(quartilemethod="exclusive") # or "inclusive", or "linear" by default 
     fig.update_layout(font=dict(size=20))
+    fig.update_layout(
+        xaxis_title_text='', # xaxis label
+        bargap=1, # gap between bars of adjacent location coordinates
+        bargroupgap=1, # gap between bars of the same location coordinates,
+        yaxis_title_text='Avg. Puncta per ROI', # yaxis label
+    )
+    fig.show()
+    
+    if not os.path.exists(f"statistics/{tag}"):
+        os.mkdir(f"statistics/{tag}")
+    fig.write_html(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.html")
+    fig.write_image(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.pdf")
+    fig.write_image(f"statistics/{tag}/boxplot_{x}_{y}_{color}_{protein}.png")
+    
+    return fig
+
+def create_boxplot2(df_RGB, x, y, color, protein, tag=""):
+    
+    if protein != None:
+        df_RGB = df_RGB[df_RGB["Protein"] == protein]
+    df_RGB = df_RGB.sort_values('Type')
+    df_RGB = df_RGB.groupby(by=['Type', 'Channel','Cell'], as_index=False).count().sort_values('Type', ascending=False)
+    fig = go.Figure()
+    
+    colors = {'0':'black', '1': '#696969', 'colocalized':'#1E88E5'}
+    
+    for channel in sorted(df_RGB.Channel.unique()):
+        fig.add_trace(go.Box(
+            y=df_RGB[(df_RGB.Channel == channel)].Intensity.values,
+            x = df_RGB[(df_RGB.Channel == channel)].Type.values,
+            name = 'Colocalized' if channel=='colocalized' else f'Channel {int(channel)+1}',
+            boxpoints='all',
+            jitter=0.5,
+            whiskerwidth=0.4,
+            fillcolor='rgba(0,0,0,0)',
+            pointpos=0, # relative position of points wrt box
+            marker_color=colors[channel],
+            line_color=colors[channel],
+            marker_size=5,
+            line_width=2)
+        )
+    
+    #fig.update_traces(quartilemethod="exclusive") # or "inclusive", or "linear" by default 
+    fig.update_layout(font=dict(size=20))
+    fig.update_layout(
+        xaxis_title_text='', # xaxis label
+        boxmode='group', # gap between bars of adjacent location coordinates
+        yaxis_title_text='Avg. Cluster per ROI', # yaxis label
+        plot_bgcolor = 'white'
+    )
+    fig.update_xaxes(linecolor='black')
+    fig.update_yaxes(linecolor='black')
     fig.show()
     
     if not os.path.exists(f"statistics/{tag}"):
@@ -37,28 +93,58 @@ def create_count(df_RGB, x, color, protein, tag=""):
     
     if protein != None:
         df_RGB = df_RGB[df_RGB["Protein"] == protein]
-    df_RGB = df_RGB.groupby(by=["File","Type","Channel","Protein"],as_index=False).count().sort_values("Type", ascending=False)
-    fig = px.histogram(df_RGB, x=x, y="Unnamed: 0",color=color, barmode="group", histfunc="avg")
+    #df_RGB = df_RGB.groupby(by=["File","Type","Channel","Protein"],as_index=False).sum().sort_values("Type")
+    #df_RGB = df_RGB.sort_values("Type", ascending=True)
+    fig = px.histogram(df_RGB, x=x, y="DetperPx",color=color, barmode="group")
     fig.update_layout(font=dict(size=20))
     fig.update_layout(
-        xaxis_title_text='Channel', # xaxis label
-        yaxis_title_text='Avg Detections per Image', # yaxis label
+        xaxis_title_text='', # xaxis label
+        yaxis_title_text='Avg. Puncta per ROI', # yaxis label
         bargap=0.2, # gap between bars of adjacent location coordinates
         bargroupgap=0.2, # gap between bars of the same location coordinates,
     )
-    fig.update_xaxes(categoryorder='category ascending')
+    fig.update_xaxes(categoryorder='category descending')
+    fig.update_traces(marker_line_width=2,marker_line_color="black")
     # Reduce opacity to see both histograms
     fig.update_traces(opacity=0.75)
     fig.show()
     
     if not os.path.exists(f"statistics/{tag}"):
         os.mkdir(f"statistics/{tag}")
-    fig.write_html(f"statistics/{tag}/hist_{x}_{color}_{protein}.html")
-    fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}.pdf")
-    fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}.png")
+    fig.write_html(f"statistics/{tag}/bar_{x}_{color}_{protein}.html")
+    fig.write_image(f"statistics/{tag}/bar_{x}_{color}_{protein}.pdf")
+    fig.write_image(f"statistics/{tag}/bar_{x}_{color}_{protein}.png")
     
     return fig
 
+def create_hist(df_RGB, x, color, protein, tag=""):
+    if protein != None:
+        df_RGB = df_RGB[df_RGB["Protein"] == protein]
+    #df_RGB = df_RGB.groupby(by=["File","Type", x],as_index=False).count().sort_values("Type", ascending=False)
+    #print(df_RGB)
+    
+    for i in np.unique(df_RGB.Channel):
+        df_rgb = df_RGB[df_RGB.Channel == i]
+        df_rgb = df_rgb.sort_values('Type')
+        fig = px.histogram(df_rgb, x=x, color=color,
+                           nbins=10, title=f"Channel {int(i)+1}")
+        fig.update_layout(font=dict(size=20))
+        fig.update_layout(
+            xaxis_title_text='Cell Area (Px)', # xaxis label
+            yaxis_title_text='Puncta', # yaxis label
+        )
+        fig.update_xaxes(categoryorder='category ascending')
+        # Reduce opacity to see both histograms
+        fig.update_traces(opacity=0.75)
+        fig.show()
+        if not os.path.exists(f"statistics/{tag}"):
+            os.mkdir(f"statistics/{tag}")
+        fig.write_html(f"statistics/{tag}/hist_{x}_{color}_{protein}_Channel{int(i)+1}.html")
+        fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}_Channel{int(i)+1}.pdf")
+        fig.write_image(f"statistics/{tag}/hist_{x}_{color}_{protein}_Channel{int(i)+1}.png")
+    return fig
+    
+    
 def compute_statistics(images_names, protein, tag=""):
     
     df_RGB = pd.DataFrame(columns = ["File", "Channel", "#", "Intensity", "AreaPx", "Areamic", "Protein", "Type"])
@@ -68,11 +154,29 @@ def compute_statistics(images_names, protein, tag=""):
             df_RGB = pd.concat([df_RGB, pd.read_csv(image_name)], ignore_index=True)
         except:
             pass
+        
     df_RGB["Channel"] = df_RGB["Channel"].astype("string")
     df_RGB.loc[:,"Protein"] = df_RGB.loc[:,"Protein"].apply(lambda x: x[1:])
-    create_boxplot(df_RGB, y="Intensity", x="Channel", color="Type",
+    df_RGB['DetperPx'] = 1/df_RGB['AreaPx_cell']
+    df_RGB['Detpermic'] = 1/df_RGB['Areamic_cell']
+    
+    create_boxplot2(df_RGB, y="Intensity", x="Type", color="Channel",
                    protein=protein, tag=tag)
-    create_count(df_RGB, x="Channel", color="Type", protein=protein, tag=tag)
+    #create_hist(df_RGB, x="AreaPx_cell", color="Type", protein=protein, tag=tag)
+
+    #create_count(df_RGB, x="Type", color="Channel", protein=protein, tag=tag)
+    
+def compute_pearson(images_names, protein, tag=""):
+    
+    df_RGB = pd.DataFrame(columns = ["File", "Channel", "#", "Intensity", "AreaPx", "Areamic", "Protein", "Type"])
+
+    for image_name in images_names:
+        try:
+            df_RGB = pd.concat([df_RGB, pd.read_csv(image_name)], ignore_index=True)
+        except:
+            pass
+    
+    return df_RGB
     
 
 #Dataset Loader
@@ -136,7 +240,7 @@ def process_channels(img, file_name, clip_limit=0.03, contrast=9, brightness=0.2
     img_channels = []
     
     img[img>255]=255
-    
+    colocalized = np.zeros(img[:,:,0].shape)
     for i in range(img.shape[2]):
         chan = img[:,:,i]
         chan = chan.astype(np.uint8)
@@ -147,7 +251,8 @@ def process_channels(img, file_name, clip_limit=0.03, contrast=9, brightness=0.2
         chan = cont.enhance(contrast)
         chan = np.array(chan)
         chan = chan.astype(np.uint8)
-
+        
+        colocalized = colocalized + chan
         if not os.path.exists(os.path.join("results", file_name.split("/")[0])):
             os.mkdir(os.path.join("results", file_name.split("/")[0]))
             
@@ -156,8 +261,11 @@ def process_channels(img, file_name, clip_limit=0.03, contrast=9, brightness=0.2
 
         img_channels.append(chan)
         tifffile.imwrite(f'results/{file_name}/Channel_{i+1}.tiff', chan)
-    
-    
+        
+    colocalized = np.round(colocalized/img.shape[2]).astype(np.uint8)
+    img_channels.append(colocalized)
+
+    tifffile.imwrite(f'results/{file_name}/Colocalized.tiff', colocalized)
     
     return img_channels
 
